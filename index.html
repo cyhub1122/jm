@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>初忆解密工具箱｜TVbox配置专用</title>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,-apple-system,sans-serif;background:#fff;color:#1f2937;padding:20px;max-width:960px;margin:0 auto}
+.card{background:#fff;border-radius:18px;padding:24px;margin-bottom:18px;box-shadow:0 3px 15px rgba(0,0,0,0.05);border:1px solid #f0f2f5}
+.title{font-size:16px;margin-bottom:12px;color:#1f2937;font-weight:600}
+textarea{width:100%;height:200px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px;color:#1f2937;font-size:15px;outline:none;resize:vertical}
+textarea:focus{border-color:#0077ff;background:#fff;box-shadow:0 0 0 3px rgba(0,119,255,0.1)}
+button{padding:12px;border-radius:10px;border:none;color:#fff;font-weight:600;cursor:pointer}
+button:active{transform:scale(0.95);opacity:.9}
+.btn-green{background:#00b968}
+.btn-blue{background:#0077ff}
+.btn-orange{background:#ff9500}
+.btn-red{background:#ff3b30}
+.btn-gray{background:#6b7280}
+.btn-yellow{background:#f59e0b}
+.btn-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
+.btn-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.result{background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:18px;min-height:200px;white-space:pre-wrap;overflow-y:auto}
+.log-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-top:10px;font-size:12px;max-height:120px;overflow-y:auto}
+h1{text-align:center;font-size:26px;margin-bottom:8px;color:#0077ff}
+.header-info{text-align:center;font-size:13px;color:#6b7280;margin-bottom:22px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:8px;display:none;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<h1>TVbox配置解密工具箱</h1>
+<div class="header-info">支持解密：Base64 编码与 Gzip 压缩格式</div>
+
+<div class="card">
+    <div class="title">📥 输入加密串 / 接口地址</div>
+    <textarea id="input" placeholder="请粘贴加密串、配置文本、接口地址…"></textarea>
+    
+    <div class="btn-grid">
+        <button onclick="fetchAndDecrypt()" class="btn-yellow">🌐 拉取并解密</button>
+        <button onclick="autoDecrypt()" class="btn-green">🚀 直接解密</button>
+    </div>
+    <div class="btn-row">
+        <button onclick="urlDec()" class="btn-blue">URL解码</button>
+        <button onclick="urlEnc()" class="btn-blue">URL编码</button>
+        <button onclick="clearAll()" class="btn-gray">🗑 清空</button>
+    </div>
+    <div class="btn-row">
+        <button onclick="copyResult()" class="btn-orange">📋 复制结果</button>
+        <button onclick="formatJson()" class="btn-red">格式化JSON</button>
+        <button onclick="autoEncrypt()" class="btn-red">🔒加密为TVbox格式</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="title">📤 解密结果输出</div>
+    <div id="result" class="result"></div>
+    <div class="title" style="margin-top:12px">📝 运行日志</div>
+    <div id="log" class="log-box"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id)
+const log = (msg) => {
+  const d = new Date().toLocaleTimeString()
+  $("log").innerText += `[${d}] ${msg}\n`
+  const lines = $("log").innerText.split("\n")
+  if(lines.length>10)$("log").innerText=lines.slice(-10).join("\n")
+  $("log").scrollTop = $("log").scrollHeight
+}
+const toast = (msg) => {
+  const t=$("toast")
+  t.innerText=msg
+  t.style.display="block"
+  setTimeout(()=>t.style.display="none",1400)
+}
+const clearLog = () => $("log").innerText = ""
+const setResult = (txt) => {
+  $("result").innerText = txt
+  $("result").scrollTop = $("result").scrollHeight
+}
+const getClean = () => $("input").value.trim()
+let locking=false
+
+function clearAll(){
+  $("input").value=""
+  setResult("")
+  clearLog()
+  log("已清空")
+  toast("已清空")
+}
+
+// 拉取并解密
+async function fetchAndDecrypt(){
+  if(locking)return;locking=true
+  clearLog()
+  const url=getClean()
+  if(!url){log("请输入网址");locking=false;return}
+  log("拉取中...")
+  toast("处理中...")
+  try{
+    const proxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    const res=await fetch(proxy,{headers:{"User-Agent":"Mozilla/5.0"},signal:AbortSignal.timeout(10000)})
+    const text=await res.text()
+    log("拉取成功")
+    
+    let result=null
+    try{
+      const raw=atob(text.replace(/[^A-Za-z0-9+/=]/g,""))
+      const u8=Uint8Array.from(raw,c=>c.charCodeAt(0))
+      try{result=pako.inflate(u8,{to:"string"});log("Gzip解压成功")}catch{}
+      if(!result&&u8.length>1)try{
+        result=pako.inflate(u8.slice(1),{to:"string"})
+        log("脏头修复成功")
+      }catch{}
+    }catch(e){}
+    
+    if(result&&result.trim()){
+      setResult(result)
+      try{setResult(JSON.stringify(JSON.parse(result),null,2));log("自动格式化JSON")}catch{}
+      toast("解密完成")
+    }else{
+      setResult(text)
+      try{setResult(JSON.stringify(JSON.parse(text),null,2));log("自动格式化JSON")}catch{}
+      toast("已显示明文")
+    }
+  }catch(e){
+    log("拉取失败：链接无效或网络问题")
+    toast("拉取失败")
+  }
+  locking=false
+}
+
+// 解密
+function autoDecrypt(){
+  if(locking)return;locking=true
+  clearLog()
+  let txt=getClean().replace(/\s/g,"")
+  let result=null
+  try{
+    const raw=atob(txt.replace(/[^A-Za-z0-9+/=]/g,""))
+    const u8=Uint8Array.from(raw,c=>c.charCodeAt(0))
+    try{result=pako.inflate(u8,{to:"string"});log("Gzip解压成功")}catch{}
+    if(!result&&u8.length>1)try{
+      result=pako.inflate(u8.slice(1),{to:"string"})
+      log("脏头修复成功")
+    }catch{}
+  }catch(e){}
+  
+  if(result){
+    setResult(result)
+    log("解密成功")
+    toast("解密成功")
+  }else{
+    setResult(txt)
+    try{setResult(JSON.stringify(JSON.parse(txt),null,2));log("自动格式化JSON")}catch{}
+    log("已是明文")
+    toast("已是明文")
+  }
+  locking=false
+}
+
+// 加密
+function autoEncrypt(){
+  if(locking)return;locking=true;clearLog()
+  try{
+    const u8=pako.gzip(new TextEncoder().encode(getClean()))
+    setResult(btoa(String.fromCharCode(...u8)))
+    log("加密完成");toast("加密成功")
+  }catch{log("加密失败");toast("加密失败")}
+  locking=false
+}
+
+// URL
+function urlEnc(){let t=getClean();setResult(encodeURIComponent(t));log("URL编码成功");toast("编码成功")}
+function urlDec(){try{let t=getClean();setResult(decodeURIComponent(t));log("URL解码成功");toast("解码成功")}catch{log("解码失败")}}
+
+// JSON格式化
+function formatJson(){
+  try{
+    setResult(JSON.stringify(JSON.parse($("result").innerText),null,2))
+    log("JSON格式化成功")
+    toast("格式化成功")
+  }catch(e){log("非合法JSON")}
+}
+
+// 复制
+function copyResult(){
+  const t=$("result").innerText
+  if(!t){toast("暂无内容");return}
+  navigator.clipboard.writeText(t).then(()=>{log("复制成功");toast("复制成功")}).catch(()=>{
+    const ta=document.createElement("textarea")
+    ta.value=t;ta.style.position="fixed";ta.style.left="-9999px"
+    document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta)
+    log("复制成功(兼容)");toast("复制成功")
+  })
+}
+
+window.onload=()=>{log("✅ 初忆解密工具箱已就绪");toast("QQ:1838555724")}
+</script>
+</body>
+</html>
