@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TVBox 全能解密工具箱</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+body {
+  background: #f5f7fa;
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.container {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+.main-title {
+  text-align: center;
+  color: #1e40af;
+  font-size: 22px;
+  margin-bottom: 24px;
+  font-weight: 600;
+}
+.section {
+  margin-bottom: 24px;
+}
+.section-title {
+  color: #1e40af;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+textarea {
+  width: 100%;
+  height: 180px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 16px;
+  font-size: 14px;
+  resize: vertical;
+  background: #fafbfc;
+  transition: border-color 0.2s ease;
+}
+textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #ffffff;
+}
+.btn-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+button {
+  padding: 12px 8px;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+button:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+button:active {
+  transform: scale(0.96);
+}
+.btn-primary { background: #3b82f6; }
+.btn-success { background: #22c55e; }
+.btn-warning { background: #f59e0b; }
+.btn-secondary { background: #64748b; }
+.result-box {
+  background: #f8f9fa;
+  padding: 18px;
+  border-radius: 12px;
+  min-height: 160px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid #e2e8f0;
+}
+.log {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 10px;
+  max-height: 100px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  display: none;
+  z-index: 999;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h2 class="main-title">TVBox 全能解密工具箱</h2>
+  <div class="section">
+    <div class="section-title">输入区</div>
+    <textarea id="input" placeholder="请粘贴加密串、配置文本、接口地址..."></textarea>
+  </div>
+
+  <div class="section">
+    <div class="section-title">解密功能</div>
+    <div class="btn-group">
+      <button onclick="autoDec()" class="btn-primary">一键全能解密</button>
+      <button onclick="autoDecrypt()" class="btn-success">直接解密(初忆)</button>
+      <button onclick="fetchAndDecrypt()" class="btn-warning">拉取并解密</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">实用工具</div>
+    <div class="btn-group">
+      <button onclick="urlEnc()" class="btn-primary">URL编码</button>
+      <button onclick="urlDec()" class="btn-primary">URL解码</button>
+      <button onclick="formatJson()" class="btn-success">格式化JSON</button>
+      <button onclick="copyAll()" class="btn-success">复制结果</button>
+      <button onclick="clearAll()" class="btn-secondary">清空全部</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">输出结果</div>
+    <div id="result" class="result-box"></div>
+    <div id="log" class="log"></div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// 一键全能解密
+function autoDec() {
+  let raw = $('input').value.trim().replace(/\s/g, '');
+  if (!raw) { toast("请输入内容"); return; }
+  try {
+    let binStr = atob(raw);
+    let bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    let txt = pako.inflate(bytes, { to: 'string' });
+    txt = removeMagic(txt);
+    try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch {}
+    setResult(txt);
+    log("标准解密成功");
+    return;
+  } catch (e) {}
+  try {
+    let binStr = atob(atob(raw));
+    let bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    let txt = pako.inflate(bytes, { to: 'string' });
+    txt = removeMagic(txt);
+    try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch {}
+    setResult(txt);
+    log("双层解密成功");
+    return;
+  } catch (e) {}
+  try {
+    let clean = raw.replace(/[^A-Za-z0-9+/=]/g, "");
+    let binStr = atob(clean);
+    let bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    let txt = pako.inflate(bytes, { to: 'string' });
+    try {
+      txt = Array.from(txt, c => String.fromCharCode(c.charCodeAt(0) ^ 0x73)).join('');
+      txt = txt.split('').reverse().join('');
+    } catch {}
+    txt = removeMagic(txt);
+    try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch {}
+    setResult(txt);
+    log("XOR兼容解密成功");
+    return;
+  } catch (e) {}
+  setResult("解密失败");
+  log("全能解密失败");
+  toast("解密失败");
+}
+
+// 直接解密
+function autoDecrypt(){
+  let txt=$('input').value.trim().replace(/\s/g,"");
+  let result=null;
+  try{
+    let raw=atob(txt.replace(/[^A-Za-z0-9+/=]/g,""));
+    let u8=Uint8Array.from(raw,c=>c.charCodeAt(0));
+    result=pako.inflate(u8,{to:"string"});
+  }catch(e){}
+  if(result){
+    setResult(result);
+    log("直接解密成功");
+    toast("解密成功");
+  }else{
+    setResult(txt);
+    log("已是明文");
+    toast("已是明文");
+  }
+}
+
+// 拉取并解密
+async function fetchAndDecrypt(){
+  let url=$('input').value.trim();
+  if(!url){log("请输入网址");toast("请输入网址");return;}
+  log("拉取中...");toast("拉取中...");
+  try{
+    const proxy=`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+    let res=await fetch(proxy,{timeout:10000});
+    let text=await res.text();
+    let result=null;
+    try{
+      let raw=atob(text.replace(/[^A-Za-z0-9+/=]/g,""));
+      let u8=Uint8Array.from(raw,c=>c.charCodeAt(0));
+      result=pako.inflate(u8,{to:"string"});
+    }catch(e){}
+    if(result){
+      setResult(result);
+      try{setResult(JSON.stringify(JSON.parse(result),null,2))}catch{}
+      log("拉取+解密成功");
+      toast("拉取+解密成功");
+    }else{
+      setResult(text);
+      log("拉取成功(明文)");
+      toast("拉取成功");
+    }
+  }catch(e){
+    log("拉取失败");
+    toast("拉取失败");
+  }
+}
+
+// 工具函数
+function urlEnc(){setResult(encodeURIComponent($('input').value.trim()));log("URL编码完成")}
+function urlDec(){try{setResult(decodeURIComponent($('input').value.trim()));log("URL解码完成")}catch{log("URL解码失败")}}
+function formatJson(){try{setResult(JSON.stringify(JSON.parse($('result').innerText),null,2));log("JSON格式化完成");toast("格式化成功")}catch{log("JSON格式错误");toast("格式错误")}}
+function copyAll(){let t=$('result').innerText;if(!t){toast("无内容");return;}navigator.clipboard.writeText(t).then(()=>toast("复制成功")).catch(()=>toast("复制失败"))}
+function clearAll(){$('input').value="";setResult("");log("已清空全部");toast("已清空")}
+
+// 通用
+function setResult(txt){$('result').innerText=txt}
+function log(msg){const d=new Date().toLocaleTimeString();$('log').innerText+=`[${d}] ${msg}\n`;if($('log').innerText.split('\n').length>10)$('log').innerText=$('log').innerText.split('\n').slice(-10).join('\n');$('log').scrollTop=$('log').scrollHeight}
+function toast(msg){let t=$('toast');t.innerText=msg;t.style.display='block';setTimeout(()=>t.style.display='none',1400)}
+function removeMagic(str){const m=['TVBOX$','TVBOX_','FINAL$','NO_REVERSE$'];m.forEach(x=>{if(str.includes(x))str=str.split(x).pop()});return str}
+</script>
+</body>
+</html>
